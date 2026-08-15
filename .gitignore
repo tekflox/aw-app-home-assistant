@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Generated from mcp.template.json by aw-workspace on every activation.
+mcp.json
