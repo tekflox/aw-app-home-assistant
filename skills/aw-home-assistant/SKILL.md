@@ -27,14 +27,52 @@ Tier-2 container app (`aw-app-home-assistant`) listening on port **8123**.
 
 ### Through MCP (preferred, no token in your hands)
 
-If the `home-assistant` MCP upstream is enabled in the gateway, call the
-`aw__home_assistant__*` tools directly (`HassMediaSearchAndPlay`,
-`GetLiveContext`, `HassTurnOn`, …). The bearer token lives in the gateway's
-config, never in an agent's context.
+Home Assistant serves its own MCP endpoint, aggregated by `aw-mcp-gateway`.
+Call the `aw__home_assistant__*` tools directly — the bearer token lives in
+the gateway's config and never enters an agent's context.
 
-**This is off by default** and takes a manual step to enable — see
-"Enabling the MCP tools" in the app's README. If those tools aren't in your
-tool list, that step hasn't been done; use the REST API below.
+**19 tools, verified served on 2026-08-15:**
+
+| Tool | Use it for |
+|---|---|
+| `GetLiveContext` | **Start here.** The current state of every exposed device — what's playing, what's on, who's home. Ask this before acting rather than guessing entity IDs. |
+| `GetDateTime` | HA's own clock/timezone. |
+| `HassTurnOn` / `HassTurnOff` | Switches, lights, media players, anything toggleable. |
+| `HassMediaPause` / `HassMediaUnpause` | Pause/resume playback. |
+| `HassMediaNext` / `HassMediaPrevious` | Skip tracks. |
+| `HassMediaSearchAndPlay` | Play something by name ("toca Djavan"). |
+| `HassSetVolume` / `HassSetVolumeRelative` | Absolute (0–100) / relative volume. |
+| `HassMediaPlayerMute` / `HassMediaPlayerUnmute` | Mute toggle. |
+| `HassBroadcast` | Announce a message on the speakers. |
+| `HassCancelAllTimers` | Kill running timers on a device. |
+| `todo_get_items`, `HassListAddItem`, `HassListCompleteItem`, `HassListRemoveItem` | Shopping / to-do lists. |
+
+These are HA's **intent** API: they take natural names ("Echo Dot", "the
+bedroom"), not `entity_id`s, and they only reach entities HA has *exposed* to
+assistants (Settings → Voice assistants → Expose). An entity that exists in
+the REST `/api/states` dump but isn't exposed is invisible to every tool above
+— that asymmetry is the usual reason an MCP call says it can't find a device
+you can plainly see.
+
+**What MCP cannot do — reach for REST instead:**
+
+- **`alexa_devices.send_text_command`** has no MCP equivalent. Anything phrased
+  as a spoken command to Alexa — TuneIn radio, "play Spotify", built-in skills
+  — goes through the REST recipe below. This is the single biggest gap.
+- `send_sound` / `send_info_skill`, likewise.
+- Admin work: reloading a config entry, the device/entity registries,
+  inspecting integrations.
+
+**If the tools aren't in your tool list**, check in this order:
+
+1. Is your session older than the app? An agent's tool list is snapshotted at
+   session start — a session that began before the app was installed will
+   never see them. Start a new session.
+2. Did the app just update? An update overwrites
+   `/opt/aw-workspace/apps/home-assistant/mcp.json` back to its disabled
+   placeholder and the tools vanish from the gateway. Re-apply the token per
+   the app's README, then `aw-workspace-cli restart mcp-gateway`.
+3. Otherwise fall back to the REST API below — it needs no gateway.
 
 ### Raw REST API
 
