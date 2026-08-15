@@ -1,0 +1,32 @@
+{
+  "_comment": [
+    "Home Assistant's own MCP server, exposed to agents through aw-mcp-gateway.",
+    "",
+    "DISABLED BY DEFAULT, and it has to be: HA's /api/mcp needs a long-lived",
+    "access token, that token is specific to one install, and this repo is",
+    "public — so there is nothing sensible to ship here. Enabling it is a",
+    "two-step manual edit of the INSTALLED copy of this file at",
+    "/opt/aw-workspace/apps/home-assistant/mcp.json:",
+    "",
+    "  1. In Home Assistant: add the 'Model Context Protocol Server'",
+    "     integration (Settings -> Devices & Services -> Add integration),",
+    "     then create a long-lived access token from your user profile.",
+    "  2. Paste it below in place of REPLACE_WITH_HA_LONG_LIVED_TOKEN, set",
+    "     enabled to true, and run: aw-workspace-cli restart mcp-gateway",
+    "",
+    "Caveat worth knowing before you rely on it: the installed package dir is",
+    "overwritten wholesale on every app update, so an app upgrade resets this",
+    "file back to the disabled placeholder and the HA tools disappear from the",
+    "gateway until you redo step 2. See README.md."
+  ],
+  "mcpServers": {
+    "home-assistant": {
+      "enabled": false,
+      "type": "http",
+      "url": "http://aw-app-home-assistant:8123/api/mcp",
+      "headers": {
+        "Authorization": "Bearer REPLACE_WITH_HA_LONG_LIVED_TOKEN"
+      }
+    }
+  }
+}

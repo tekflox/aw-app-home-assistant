@@ -1,0 +1,91 @@
+{
+  "manifest_version": 1,
+  "id": "home-assistant",
+  "name": "Home Assistant",
+  "version": "0.1.0",
+  "description": "Runs Home Assistant in your workspace — control lights, speakers, Alexa/Echo devices and sensors, read the state of your home, and let agents do the same. Opens as a window in the Apps grid, keeps its whole configuration and history on the workspace disk, and comes with the Amazon Alexa integration preinstalled.",
+  "icon": "home",
+  "tier": "container",
+  "requires_ui_refresh": true,
+  "publisher": "TekFlox",
+  "resource_estimate": {
+    "cpu": "medium",
+    "memory": "~600 MB",
+    "disk": "~1 GB"
+  },
+  "runtime": {
+    "image": "ghcr.io/tekflox/aw-app-home-assistant:latest",
+    "port": 8123,
+    "resources": {
+      "cpus": 1,
+      "mem_mb": 1536
+    },
+    "env": {
+      "TZ": "${config.timezone|America/New_York}"
+    },
+    "volumes": [
+      {
+        "source": "$AW_APP_DATA/config",
+        "target": "/config",
+        "mode": "rw",
+        "reason": "Home Assistant's entire state — configuration.yaml, the .storage auth/registry tree, the recorder SQLite DB, integration deps and automations. Without it every container recreation (app update, workspace redeploy) loses the onboarding, every linked account and all history."
+      }
+    ]
+  },
+  "permissions": [
+    "containers:manage",
+    "fs:workspace-data"
+  ],
+  "contributes": {
+    "windows": [
+      {
+        "id": "home-assistant.main",
+        "title": "Home Assistant",
+        "icon": "home",
+        "body": {
+          "type": "managed_app",
+          "kind": "web",
+          "path": "/"
+        }
+      }
+    ],
+    "skills": [
+      {
+        "id": "aw-home-assistant",
+        "path": "skills/aw-home-assistant/SKILL.md",
+        "description": "Control and query this workspace's Home Assistant — Alexa/Echo devices, media playback, TTS announcements, sensors and device state, over the REST API or the Home Assistant MCP tools."
+      }
+    ],
+    "mcp": {
+      "provides": [
+        "GetLiveContext",
+        "HassTurnOn",
+        "HassTurnOff",
+        "HassMediaSearchAndPlay",
+        "HassMediaPause",
+        "HassMediaUnpause",
+        "HassSetVolume",
+        "HassBroadcast"
+      ]
+    }
+  },
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "auto_start": {
+        "type": "boolean",
+        "default": true,
+        "title": "Auto-start",
+        "description": "Start Home Assistant automatically when the workspace starts."
+      },
+      "timezone": {
+        "type": "string",
+        "default": "America/New_York",
+        "title": "Time zone",
+        "description": "IANA time zone the container runs in, e.g. America/Sao_Paulo. Home Assistant's own time zone is set separately in its onboarding/General settings."
+      }
+    },
+    "required": []
+  },
+  "dependencies": {}
+}
