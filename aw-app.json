@@ -83,6 +83,13 @@
         "default": "America/New_York",
         "title": "Time zone",
         "description": "IANA time zone the container runs in, e.g. America/Sao_Paulo. Home Assistant's own time zone is set separately in its onboarding/General settings."
+      },
+      "mcp_token": {
+        "type": "string",
+        "format": "password",
+        "default": "",
+        "title": "Home Assistant access token",
+        "description": "A Home Assistant long-lived access token, which lets agents control your home through the Model Context Protocol tools. Add the 'Model Context Protocol Server' integration in Home Assistant, then create a token under your profile's Security tab and paste it here. Leave empty to keep the MCP tools off. Stored with this app's settings, so it survives updates and reinstalls."
       }
     },
     "required": []

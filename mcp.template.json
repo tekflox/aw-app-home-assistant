@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "Home Assistant's own MCP server, exposed to agents through aw-mcp-gateway.",
+    "",
+    "This is a TEMPLATE. aw-workspace renders it into mcp.json — the file the",
+    "gateway's app-scan actually reads — on every activation and every config",
+    "save, resolving ${config.x} against this app's saved settings. Do not edit",
+    "the rendered mcp.json: it is overwritten, and the value you want lives in",
+    "the app's Settings instead.",
+    "",
+    "To turn these tools on:",
+    "  1. In Home Assistant, add the 'Model Context Protocol Server'",
+    "     integration (Settings -> Devices & Services -> Add integration).",
+    "  2. Create a long-lived access token from your HA user profile",
+    "     (Security -> Long-lived access tokens).",
+    "  3. Paste it into this app's Settings -> 'Home Assistant access token'.",
+    "",
+    "Until step 3, mcp_token is empty, the renderer disables this server, and",
+    "the gateway serves no Home Assistant tools — deliberately, because an",
+    "upstream configured with an unresolved placeholder does not fail loudly.",
+    "It connects, gets a 401, and serves zero tools, which looks like a broken",
+    "app rather than an empty field."
+  ],
+  "mcpServers": {
+    "home-assistant": {
+      "enabled": true,
+      "type": "http",
+      "url": "http://aw-app-home-assistant:8123/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ${config.mcp_token}"
+      }
+    }
+  }
+}

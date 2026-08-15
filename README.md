@@ -47,28 +47,44 @@ custom app (`src/config/aw.json`) on 2026-08-15.
 
 ## Enabling the MCP tools
 
-Home Assistant ships its own MCP server, which is how an agent controls Alexa
-without ever holding a token. It is **off by default** and enabling it is
-manual, because `/api/mcp` needs a long-lived access token that is specific to
-one install and this repo is public.
+Home Assistant ships its own MCP server — that's how an agent controls your
+home without ever holding a token. Three steps, once:
 
 1. In Home Assistant: **Settings → Devices & Services → Add integration →
    Model Context Protocol Server**.
-2. Profile → Security → **Create a long-lived access token**.
-3. Edit the *installed* copy of `mcp.json` at
-   `/opt/aw-workspace/apps/home-assistant/mcp.json` — paste the token in place
-   of `REPLACE_WITH_HA_LONG_LIVED_TOKEN` and set `"enabled": true`.
-4. `aw-workspace-cli restart mcp-gateway`, then confirm the `aw__home_assistant__*`
-   tools appear.
+2. Your profile → Security → **Create a long-lived access token**.
+3. Paste it into this app's **Settings → Home Assistant access token**.
 
-> **This does not survive an app update.** The installed package dir is
-> overwritten wholesale on every version bump, so step 3 resets to the
-> placeholder and the HA tools vanish from the gateway until you redo it.
-> There's no way around it today: a Tier-2 app runs no workspace-side code, so
-> it has nothing that could write the file from the secret store the way
-> `aw-app-notion` does. If this becomes annoying, the fix is upstream — either
-> config substitution in the app-scan's `mcp.json` read, or splitting a
-> one-file Tier-1 companion app out of this one.
+The tools appear right after the save. Leave the field empty to keep them off.
+
+### How the token survives an update
+
+The gateway reads `apps/<slug>/mcp.json`, which lives in the installed package
+dir — and an app update overwrites that dir wholesale. A token written into
+that file directly would last exactly until the next version bump, after which
+the upstream stays listed and serves zero tools, with nothing reporting it.
+
+So this app ships **`mcp.template.json`**, not `mcp.json`:
+
+```jsonc
+"headers": { "Authorization": "Bearer ${config.mcp_token}" }
+```
+
+aw-workspace renders the template into `mcp.json` on every activation and
+every config save, resolving `${config.…}` against the app's saved settings —
+which live in `<AW_WORKSPACE_HOME>/app-config/home-assistant.json`, outside the
+package dir, and which uninstall deliberately keeps. So the credential
+survives an update, an uninstall/install and a workspace redeploy with nobody
+re-pasting anything. **Never edit the rendered `mcp.json`** — it is
+regenerated; edit the setting.
+
+If `mcp_token` is empty the renderer sets `"enabled": false` on that upstream
+rather than shipping it with an unresolved placeholder. That is deliberate: an
+upstream whose auth header is the literal string `${config.mcp_token}` doesn't
+fail loudly, it connects, gets a 401 and serves nothing — which reads as a
+broken app instead of a blank field.
+
+Requires aw-workspace with `src/apps/mcp_template.py` (2026-08-15 or later).
 
 ## Migrating an existing Home Assistant
 
