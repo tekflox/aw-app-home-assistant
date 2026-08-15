@@ -211,22 +211,40 @@ common one here) drop every entity to `unavailable` when that cloud returns an
 error, then recover on their own within minutes. Symptoms: all entities
 `unavailable`, a service call returning 500 "Entry not loaded".
 
-Force a reconnect by reloading the config entry:
+**First: wait.** These recover on their own, and the cheap-looking fix below
+can make things worse.
+
+Check the config entry's own state before touching anything — it tells you
+whether the integration is healthy and merely out of data (`loaded`) or
+actually broken (`setup_error`):
 
 ```bash
-# find the entry id
 curl -s "$H/api/config/config_entries/entry" -H "Authorization: Bearer $TOKEN" \
   | python3 -c "
 import sys, json
 for e in json.load(sys.stdin): print(e['entry_id'], e['domain'], e['title'], e['state'])
 "
-# reload it
-curl -s -X POST "$H/api/config/config_entries/entry/<entry_id>/reload" \
-  -H "Authorization: Bearer $TOKEN"
-# → {"require_restart":false}
 ```
 
-Wait ~10 s and re-check; if still unavailable, wait another 30 s and retry.
+> **Don't reload a `loaded` entry to 'force a reconnect'.** Reloading tears
+> the integration down and sets it up again, and setup re-fetches everything
+> from the vendor cloud — the same cloud that is currently failing. Verified
+> on 2026-08-15 with `alexa_devices`: one device was working fine, a reload
+> was issued, setup died inside `get_communication_preferences` with
+> *"Setup of config entry … cancelled"*, and the entry went from `loaded` to
+> **`setup_error` with every entity unavailable**. It never recovered on its
+> own, and a second reload didn't help either. A reload trades a partial
+> outage for a total one.
+
+**Recovery, in order:**
+
+1. **Wait.** A `loaded` entry with stale entities usually catches up within
+   minutes.
+2. **Restart the app** — `aw-workspace-cli restart home-assistant`, then allow
+   ~2 minutes. Integrations are set up fresh on boot, and this is what
+   actually brought the `setup_error` entry back above.
+3. Reload the entry only if it is *already* `setup_error` — i.e. when there is
+   nothing left to lose.
 
 > **Don't use the displayed state to decide whether a command landed.** A
 > command sent while entities read `unavailable` can still go through, with HA
