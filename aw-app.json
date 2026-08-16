@@ -2,7 +2,7 @@
   "manifest_version": 1,
   "id": "home-assistant",
   "name": "Home Assistant",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Runs Home Assistant in your workspace \u2014 control lights, speakers, Alexa/Echo devices and sensors, read the state of your home, and let agents do the same. Opens as a window in the Apps grid, keeps its whole configuration and history on the workspace disk, and comes with the Amazon Alexa integration preinstalled.",
   "icon": "home",
   "tier": "container",
