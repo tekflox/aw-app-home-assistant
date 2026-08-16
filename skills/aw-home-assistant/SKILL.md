@@ -272,9 +272,42 @@ not by running them locally.
 `<AW_WORKSPACE_HOME>/data/home-assistant/config` on the workspace disk, so it
 survives app updates, container recreation and workspace redeploys.
 
-The `http:` block in `configuration.yaml` is maintained by the app's
-entrypoint on every boot. Home Assistant sits behind aw-workspace's reverse
-proxy and answers **400 to every request** without
-`use_x_forwarded_for` / `trusted_proxies` — don't remove them. If the window
-ever renders an error page rather than the UI, check that block before
-anything else.
+### If the window shows `400: Bad Request`
+
+Home Assistant sits behind aw-workspace's reverse proxy and answers **400 to
+every request** unless it trusts the forwarding address. Confirm from the log
+rather than guessing:
+
+```bash
+aw-workspace-cli logs home-assistant | grep -i "untrusted proxy"
+# Received X-Forwarded-For header from an untrusted proxy 10.89.0.90
+```
+
+**The setting lives in `/config/.storage/http`, not `configuration.yaml`.**
+Modern HA migrated the `http:` integration into a stored config with a
+`stable` block (what the running server reads) and an optional `pending` one.
+The app's entrypoint maintains `stable` on every boot; it only touches the
+YAML on older HA versions that have no such file.
+
+This one is worth knowing because **everything you would check to verify it
+lies to you**:
+
+- `check_config --info http` reads the YAML and prints whatever is written
+  there, regardless of what the server is using.
+- YAML config is filed as `pending` and tried for one boot, then reverted to
+  `stable` unless a human confirms it in the web UI — impossible when the
+  setting under trial is what makes the web UI reachable. It is then stamped
+  `"error": "not_promoted"` and skipped forever.
+
+So read `.storage/http` directly:
+
+```bash
+sudo python3 -c "
+import json; d = json.load(open('<config>/.storage/http'))
+print('stable :', d['data']['stable']['trusted_proxies'])
+print('pending:', d['data'].get('pending'))"
+```
+
+If `stable` is missing the proxy's network, **stop the app, fix the file,
+start it** — HA rewrites `.storage` from memory while running, so an edit to a
+live instance is silently discarded (the same rule as `.storage/auth`).

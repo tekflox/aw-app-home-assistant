@@ -13,10 +13,13 @@
 #
 #   2. A reverse-proxy fixup at boot. aw-workspace reaches this container
 #      through its own proxy on a podman network, so Home Assistant sees a
-#      forwarded request from an address it doesn't trust and answers 400
-#      ("A request from a reverse proxy was received…") for EVERY request.
-#      That reads as a broken app, not as a config gap, so the entrypoint
-#      guarantees the `http:` keys rather than leaving them to onboarding.
+#      forwarded request from an address it doesn't trust and answers 400 for
+#      EVERY request. That reads as a broken app, not as a config gap, so the
+#      entrypoint guarantees the setting rather than leaving it to onboarding.
+#      It writes `.storage/http` (where modern HA keeps this after migrating
+#      it out of YAML), falling back to `configuration.yaml` on older
+#      versions — see ensure_proxy_config.py for why editing the YAML on a
+#      migrated install fails while looking correct.
 #
 # Published by .github/workflows/build.yml as
 # ghcr.io/tekflox/aw-app-home-assistant:latest.

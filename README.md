@@ -28,15 +28,46 @@ custom app (`src/config/aw.json`) on 2026-08-15.
 
 2. **A reverse-proxy fixup at boot** (`container/ensure_proxy_config.py`).
    aw-workspace proxies this container from a podman network address HA has
-   never seen, so without `http.use_x_forwarded_for` and a matching
-   `http.trusted_proxies` HA answers **400 to every request** — which renders
-   as a broken app, not as a config gap. The entrypoint guarantees those keys
-   on every boot, additively: it rewrites only the `http:` block, only when
-   something required is missing, and keeps any proxy you added yourself.
+   never seen, so without `use_x_forwarded_for` and a matching
+   `trusted_proxies` HA answers **400 to every request** — which renders as a
+   broken app, not as a config gap. The entrypoint guarantees those settings
+   on every boot, additively, keeping any proxy you added yourself.
+
+   **It writes `.storage/http`, not `configuration.yaml`** — see below.
 
 3. **Fresh-volume seeding.** The default `configuration.yaml` `!include`s
    `automations.yaml` / `scripts.yaml` / `scenes.yaml`, and an `!include` of a
    missing file is a hard startup failure, so the entrypoint creates them.
+
+### Why the proxy settings live in `.storage/http`
+
+Modern Home Assistant (2026.8 here) **migrated the `http:` integration out of
+YAML** into a stored config — `.storage/http`, holding a `stable` block and an
+optional `pending` one. `stable` is what the running server reads.
+
+Editing `configuration.yaml` on such a version isn't just useless, it fails
+with an unusually convincing alibi. Every check a person would run agrees with
+them, and the app still 400s:
+
+- `check_config --info http` reads the **YAML**, so it prints your values back
+  and confirms nothing about what the server is using.
+- HA files the YAML config under `pending`, boots on it once as a *trial*, and
+  reverts to `stable` a few minutes later unless a human confirms it **in the
+  web UI**. When the setting under trial is the one that makes the web UI
+  reachable, that confirmation is impossible. The entry is then stamped
+  `"error": "not_promoted"` and skipped on every future boot, permanently.
+- HA also raises `deprecated_yaml` and `yaml_still_present_after_migration`
+  repairs — visible only in that same unreachable UI.
+
+That is exactly what happened on 2026-08-16: `stable` still held the
+pre-migration proxy list, `pending` held the correct one marked
+`not_promoted`, and the window showed `400: Bad Request` while
+`configuration.yaml` looked perfect.
+
+So the entrypoint writes `stable` directly, clears a failed `pending`, and
+removes its own now-superseded YAML `http:` block (a hand-written one is left
+alone, with a warning). On an older HA with no `.storage/http` it falls back to
+managing the YAML block as before.
 
 ## Configuration
 

@@ -23,6 +23,8 @@ that a plain loader would either choke on or silently drop.
 """
 from __future__ import annotations
 
+import json
+import os
 import sys
 
 #: Trusted because the container is only reachable from inside the workspace's
@@ -133,6 +135,124 @@ def _split_http_block(block: list[str]) -> tuple[list[str], list[str]]:
     return proxies, keep
 
 
+STORAGE_REL = ".storage/http"
+
+
+def _as_networks(values) -> list[str]:
+    """Normalise proxy entries the way HA stores them (``a.b.c.d/32``)."""
+    import ipaddress
+    out: list[str] = []
+    for v in values or []:
+        try:
+            out.append(str(ipaddress.ip_network(v, strict=False)))
+        except ValueError:
+            continue
+    return out
+
+
+def ensure_storage(config_dir: str) -> bool | None:
+    """Fix the proxy config in ``.storage/http``. None = this HA doesn't use it.
+
+    Modern Home Assistant migrated the ``http:`` integration out of YAML into a
+    stored config (``yaml_migration_done``), and this is the file the running
+    server actually reads. Editing ``configuration.yaml`` on such a version is
+    not merely useless — it is a trap with a very convincing alibi:
+
+    * ``check_config --info http`` reads the YAML, so it happily prints the
+      values you wrote and confirms nothing.
+    * HA files the YAML under ``pending``, boots on it once as a *trial*, and
+      reverts to ``stable`` a few minutes later unless a human confirms the new
+      config **in the web UI** — which, when the broken setting is the one that
+      makes the web UI reachable, cannot be done. The entry is then marked
+      ``"error": "not_promoted"`` and skipped on every future boot, forever.
+
+    Observed 2026-08-16 on HA 2026.8: stable held the pre-migration proxy list,
+    pending held the right one with ``not_promoted``, and every request through
+    the workspace proxy 400'd while the config looked correct everywhere a
+    human would think to check.
+
+    So write ``stable`` directly, and drop any failed ``pending`` so HA has no
+    stale trial to skip.
+    """
+    path = os.path.join(config_dir, STORAGE_REL)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        print(f"aw-entrypoint: {STORAGE_REL} is unreadable — leaving it alone",
+              file=sys.stderr)
+        return None
+
+    data = doc.get("data")
+    if not isinstance(data, dict) or not isinstance(data.get("stable"), dict):
+        return None
+
+    stable = data["stable"]
+    have = _as_networks(stable.get("trusted_proxies"))
+    required = _as_networks(REQUIRED_PROXIES)
+    missing = [p for p in required if p not in have]
+
+    changed = False
+    if missing or not stable.get("use_x_forwarded_for"):
+        stable["trusted_proxies"] = have + missing
+        stable["use_x_forwarded_for"] = True
+        stable["error"] = None
+        stable["error_message"] = None
+        changed = True
+
+    # A pending trial that already failed is skipped forever and only confuses
+    # the next person reading this file. Drop it once stable is correct.
+    if data.get("pending") is not None:
+        data["pending"] = None
+        changed = True
+
+    if changed:
+        _write_json(path, doc)
+    return changed
+
+
+def _write_json(path: str, doc) -> None:
+    tmp = f"{path}.aw-tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh, indent=2)
+        fh.write("\n")
+    os.replace(tmp, path)
+
+
+def strip_managed_yaml_block(config_dir: str) -> bool:
+    """Remove OUR ``http:`` block from configuration.yaml once storage owns it.
+
+    Leaving it there makes HA raise the ``yaml_still_present_after_migration``
+    repair on every boot and re-stage a doomed ``pending`` trial. Only removed
+    when the block carries this script's own marker — a block someone wrote by
+    hand is theirs, and is left with a warning instead.
+    """
+    path = os.path.join(config_dir, "configuration.yaml")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.readlines()
+    except FileNotFoundError:
+        return False
+
+    span = _find_block(lines, "http")
+    if span is None:
+        return False
+    start, end = span
+    block = "".join(lines[start:end])
+    if "Managed by aw-app-home-assistant" not in block:
+        print("aw-entrypoint: configuration.yaml has a hand-written http: block, "
+              "but this Home Assistant reads .storage/http — the YAML block is "
+              "ignored and will raise a repair. Left in place.", file=sys.stderr)
+        return False
+
+    remaining = "".join(lines[:start] + lines[end:]).rstrip("\n") + "\n"
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(remaining)
+    return True
+
+
 def ensure(config_dir: str) -> bool:
     """Return True if the file was changed."""
     path = f"{config_dir}/configuration.yaml"
@@ -171,8 +291,16 @@ def ensure(config_dir: str) -> bool:
 
 if __name__ == "__main__":
     target = sys.argv[1] if len(sys.argv) > 1 else "/config"
-    changed = ensure(target)
-    print(
-        f"aw-entrypoint: reverse-proxy config {'updated' if changed else 'already correct'}"
-        f" in {target}/configuration.yaml"
-    )
+
+    # Storage wins when it exists: it is what the running server reads.
+    stored = ensure_storage(target)
+    if stored is None:
+        changed = ensure(target)
+        print(f"aw-entrypoint: reverse-proxy config "
+              f"{'updated' if changed else 'already correct'} in "
+              f"{target}/configuration.yaml")
+    else:
+        stripped = strip_managed_yaml_block(target)
+        print(f"aw-entrypoint: reverse-proxy config "
+              f"{'updated' if stored else 'already correct'} in {STORAGE_REL}"
+              f"{' (removed the superseded YAML http: block)' if stripped else ''}")
