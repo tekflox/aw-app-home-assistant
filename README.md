@@ -69,6 +69,22 @@ removes its own now-superseded YAML `http:` block (a hand-written one is left
 alone, with a warning). On an older HA with no `.storage/http` it falls back to
 managing the YAML block as before.
 
+### And it turns off `X-Frame-Options`
+
+Home Assistant defaults to `use_x_frame_options: true`, which sends
+`X-Frame-Options: SAMEORIGIN`. The workspace SPA frames this app from a
+*different* origin (the workspace host vs the app's own subdomain), so the
+browser refuses the frame and the window renders an empty broken-page box.
+
+Nothing logs it: HA answers 200, the proxy is fine, and only the browser
+knows. It also stayed hidden behind the 400 above — an error body carries no
+`X-Frame-Options`, so while the proxy config was wrong the window showed HA's
+"400: Bad Request" *text* and looked like one problem instead of two. Fixing
+the 400 revealed this underneath it.
+
+Safe here: the container is reachable only through the workspace's own
+authenticated edge, which is what decides who may frame it.
+
 ## Configuration
 
 | Key | Default | Meaning |

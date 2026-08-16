@@ -211,6 +211,7 @@ def test_bare_ips_are_normalised_so_they_are_not_re_added_forever():
     doc = copy.deepcopy(STORED)
     doc["data"]["stable"]["trusted_proxies"] = [
         "127.0.0.1", "::1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+    doc["data"]["stable"]["use_x_frame_options"] = False
     doc["data"]["pending"] = None
     with tempfile.TemporaryDirectory() as tmp:
         write_stored(tmp, doc)
@@ -241,3 +242,35 @@ if __name__ == "__main__":
         getattr(mod, name)()
         print(f"  ok   {name}")
     print("all checks passed")
+
+
+def test_x_frame_options_is_disabled_in_storage():
+    """SAMEORIGIN blocks the workspace SPA from framing the app window, and
+    nothing logs it — HA answers 200 and only the browser knows."""
+    with tempfile.TemporaryDirectory() as tmp:
+        write_stored(tmp)
+        epc.ensure_storage(tmp)
+        assert read_stored(tmp)["data"]["stable"]["use_x_frame_options"] is False
+
+
+def test_x_frame_options_alone_triggers_a_rewrite():
+    """A config with correct proxies but SAMEORIGIN still renders a blank
+    window, so it must not be reported as already correct."""
+    import copy
+    doc = copy.deepcopy(STORED)
+    doc["data"]["stable"]["trusted_proxies"] = [
+        "127.0.0.1/32", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+    doc["data"]["stable"]["use_x_frame_options"] = True
+    doc["data"]["pending"] = None
+    with tempfile.TemporaryDirectory() as tmp:
+        write_stored(tmp, doc)
+        assert epc.ensure_storage(tmp) is True
+        assert read_stored(tmp)["data"]["stable"]["use_x_frame_options"] is False
+        assert epc.ensure_storage(tmp) is False
+
+
+def test_yaml_fallback_also_disables_x_frame_options():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = write(tmp, MONOLITH_CONFIG)
+        epc.ensure(tmp)
+        assert parsed(path)["http"]["use_x_frame_options"] is False

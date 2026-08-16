@@ -308,6 +308,12 @@ print('stable :', d['data']['stable']['trusted_proxies'])
 print('pending:', d['data'].get('pending'))"
 ```
 
+The same file also carries **`use_x_frame_options`**, which must be `false`.
+HA's default sends `X-Frame-Options: SAMEORIGIN`, and the workspace SPA frames
+this app from a different origin — so the window renders an empty broken-page
+box with nothing logged anywhere (HA answers 200; only the browser knows).
+If the window is blank rather than 400, check that key.
+
 If `stable` is missing the proxy's network, **stop the app, fix the file,
 start it** — HA rewrites `.storage` from memory while running, so an edit to a
 live instance is silently discarded (the same rule as `.storage/auth`).

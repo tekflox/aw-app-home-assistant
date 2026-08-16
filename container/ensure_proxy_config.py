@@ -70,6 +70,8 @@ def _http_block(existing_proxies: list[str], keep: list[str] | None = None) -> s
         "  # Managed by aw-app-home-assistant — aw-workspace proxies this",
         "  # container, so HA must trust the forwarded address or answer 400.",
         "  use_x_forwarded_for: true",
+        # SAMEORIGIN blocks the workspace SPA from framing this app's window.
+        "  use_x_frame_options: false",
         "  trusted_proxies:",
     ]
     lines += [f"    - {p}" for p in proxies]
@@ -102,7 +104,7 @@ def _find_block(lines: list[str], key: str) -> tuple[int, int] | None:
 
 #: Keys inside ``http:`` that this script owns and therefore rewrites. Every
 #: other line of the block is preserved verbatim.
-_MANAGED_KEYS = ("use_x_forwarded_for:", "trusted_proxies:")
+_MANAGED_KEYS = ("use_x_forwarded_for:", "use_x_frame_options:", "trusted_proxies:")
 
 
 def _split_http_block(block: list[str]) -> tuple[list[str], list[str]]:
@@ -200,6 +202,26 @@ def ensure_storage(config_dir: str) -> bool | None:
         stable["use_x_forwarded_for"] = True
         stable["error"] = None
         stable["error_message"] = None
+        changed = True
+
+    # Home Assistant defaults to sending `X-Frame-Options: SAMEORIGIN`, and the
+    # workspace SPA frames this app from a DIFFERENT origin (the workspace host
+    # vs the app's own subdomain), so the browser blocks the frame and the
+    # window renders an empty broken-page box. Nothing is logged anywhere: HA
+    # answers 200, the proxy is fine, and only the browser knows why.
+    #
+    # This was invisible until 2026-08-16 because the reverse-proxy 400 got
+    # there first — an error body carries no X-Frame-Options, so the window
+    # showed HA's "400: Bad Request" text and looked like a proxy problem
+    # alone. Fixing the 400 revealed the second, quieter one underneath.
+    #
+    # Safe here: the container is only reachable through the workspace's own
+    # authenticated edge, which is what decides who may frame it.
+    # `is not False` rather than a truthiness check: an ABSENT key means HA's
+    # own default, which is on — so a missing key has to be written, not
+    # skipped.
+    if stable.get("use_x_frame_options") is not False:
+        stable["use_x_frame_options"] = False
         changed = True
 
     # A pending trial that already failed is skipped forever and only confuses
