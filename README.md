@@ -157,7 +157,7 @@ carry over unchanged.
 ## Development
 
 ```bash
-python tests/validate_manifest.py     # manifest against schemas/aw-app.schema.json
+python tests/validate_manifest.py     # manifest against aw-marketplace's canonical schema
 python tests/test_proxy_config.py     # the configuration.yaml fixup
 ```
 
