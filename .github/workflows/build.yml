@@ -3,8 +3,8 @@ name: Build Home Assistant image
 # Builds the app's Home Assistant image and pushes it to
 # ghcr.io/<owner>/aw-app-home-assistant.
 #
-#   gh workflow run build.yml                        # amd64
-#   gh workflow run build.yml -f include_arm64=true  # + linux/arm64 (QEMU)
+#   gh workflow run build.yml                          # amd64 + linux/arm64 (default)
+#   gh workflow run build.yml -f include_arm64=false   # amd64 only (skip QEMU arm64)
 #
 # One-time manual step after the FIRST push: GitHub creates the container
 # package private regardless of this repo's visibility, and there is no
@@ -21,7 +21,7 @@ on:
       include_arm64:
         description: 'Also build linux/arm64 (QEMU emulation; slower)'
         type: boolean
-        default: false
+        default: true
 
 concurrency:
   group: build-aw-app-home-assistant-${{ github.ref }}
